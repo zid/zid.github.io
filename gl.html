@@ -1,0 +1,530 @@
+<canvas id="canvas" width="1280" height="720"></canvas>
+<div id="meow"></div>
+<script type="x-shader/x-vertex" id="visvert">#version 300 es
+precision highp float;
+
+in vec3 pos;
+
+out vec4 fpos;
+uniform float frames, scale, rot;
+
+void main(void)
+{
+	float F = 256.0;
+	float N = 1.0;
+	float FOV = 1.0/0.572;
+
+	mat4 persp = mat4(
+		0.5625 * FOV,  0.0,  0.0,         0.0,
+		0.0,           FOV,  0.0,         0.0,
+		0.0,           0.0, -F/(F-N),    -1.0,
+		0.0,           0.0, -(F*N)/(F-N), 0.0
+	);
+
+	mat4 trans = mat4(
+		1.0, 0.0, 0.0, 0.0,
+		0.0, 1.0, 0.0, 0.0,
+		0.0, 0.0, 1.0, 0.0,
+		0.0, 10.0, -94, 1.0
+	);
+	float xr, yr, zr;
+	
+	float ff = frames/20.0;
+
+	xr = 1.27079;
+	yr = 0.0;
+	zr = ff/80.36 * rot - 4.2;
+
+	mat4 rotz = mat4(
+		cos(zr), -sin(zr), 0, 0,
+		sin(zr), cos(zr), 0, 0,
+		0, 0, 1, 0,
+		0, 0, 0, 1
+	);
+
+	mat4 roty = mat4(
+		cos(yr), 0, sin(yr), 0,
+		0, 1, 0, 0,
+		-sin(yr), 0, cos(yr), 0,
+		0, 0, 0, 1
+	);
+	
+	mat4 rotx = mat4(
+		1, 0, 0, 0,
+		0, cos(xr), -sin(xr), 0,
+		0, sin(xr), cos(xr), 0,
+		0, 0, 0, 1
+	);
+
+	vec4 t;
+	t = persp * trans * roty * rotx * rotz * vec4(pos*scale, 1.0);
+	gl_Position = t;
+	fpos = t;
+}
+</script>
+<script type="x-shader/x-fragment" id="visfrag">#version 300 es
+
+precision highp float;
+
+uniform vec3 colour;
+out vec4 outcol;
+
+in vec4 fpos;
+
+void main(void)
+{
+	outcol = vec4(1.0, 1.0, 1.0, 1.0);
+}
+</script>
+
+<script type="x-shader/x-vertex" id="vert">#version 300 es
+precision highp float;
+
+in vec3 pos;
+in vec3 normie;
+
+uniform float frames, scale, rot;
+uniform vec3 mov;
+
+out vec4 fpos;
+flat out vec3 norm;
+
+void main(void)
+{
+	float F = 256.0;
+	float N = 1.0;
+	float FOV = 1.0/0.572;
+
+	float xr, yr, zr;
+	
+	float ff = frames/20.0;
+
+	xr = 1.27079;
+	yr = 0.0;
+	zr = ff/80.36 * rot - 4.2;
+
+	mat4 rotz = mat4(
+		cos(zr), -sin(zr), 0, 0,
+		sin(zr), cos(zr), 0, 0,
+		0, 0, 1, 0,
+		0, 0, 0, 1
+	);
+
+	mat4 roty = mat4(
+		cos(yr), 0, sin(yr), 0,
+		0, 1, 0, 0,
+		-sin(yr), 0, cos(yr), 0,
+		0, 0, 0, 1
+	);
+	
+	mat4 rotx = mat4(
+		1, 0, 0, 0,
+		0, cos(xr), -sin(xr), 0,
+		0, sin(xr), cos(xr), 0,
+		0, 0, 0, 1
+	);
+
+	mat4 persp = mat4(
+		0.5625 * FOV, 0.0, 0.0,          0.0,
+		0.0,    FOV, 0.0,          0.0,
+		0.0,    0.0, -F/(F-N),    -1.0,
+		0.0,    0.0, -(F*N)/(F-N), 0.0
+	);
+
+	mat4 trans = mat4(
+		1.0, 0.0, 0.0, 0.0,
+		0.0, 1.0, 0.0, 0.0,
+		0.0, 0.0, 1.0, 0.0,
+		0.0, 10.0, -94, 1.0
+	);
+
+	gl_Position = persp * trans * (roty * rotx * rotz * vec4(pos * scale, 1.0));
+	fpos = gl_Position;
+	norm = vec3(roty * rotx * rotz * vec4(normie, 1.0));
+}
+</script>
+
+<script type="x-shader/x-fragment" id="frag">#version 300 es
+
+precision highp float;
+
+uniform vec3 colour;
+out vec4 outcol;
+
+in vec4 fpos;
+flat in vec3 norm;
+
+void main(void)
+{
+	vec3 view = vec3(0, 10, -90);
+	vec3 lightpos = vec3(-50.0, -40.0, 60);
+	vec3 dir = normalize(lightpos - vec3(fpos));
+	vec3 nnorm = normalize(norm);
+	float diff = max(dot(nnorm, dir), 0.0);
+
+	outcol = vec4(vec3(1.0, 0.1, 0.1) * diff, 1.0);
+}
+</script>
+
+<script>
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('webgl2');
+
+ctx.viewport(0, 0, 1280, 720);
+ctx.clearColor(1.0, 0.0, 0.0, 1.0);
+ctx.clear(ctx.COLOR_BUFFER_BIT);
+
+var vshade = ctx.createShader(ctx.VERTEX_SHADER);
+ctx.shaderSource(vshade, document.querySelector("#vert").innerHTML);
+ctx.compileShader(vshade);
+if(!ctx.getShaderParameter(vshade, ctx.COMPILE_STATUS))
+{
+	console.log(ctx.getShaderInfoLog(vshade));
+}
+
+var fshade = ctx.createShader(ctx.FRAGMENT_SHADER);
+ctx.shaderSource(fshade, document.querySelector("#frag").innerHTML);
+ctx.compileShader(fshade);
+if(!ctx.getShaderParameter(fshade, ctx.COMPILE_STATUS))
+{
+	console.log(ctx.getShaderInfoLog(fshade));
+}
+
+var visshade = ctx.createShader(ctx.VERTEX_SHADER);
+ctx.shaderSource(visshade, document.querySelector("#visvert").innerHTML);
+ctx.compileShader(visshade);
+if(!ctx.getShaderParameter(visshade, ctx.COMPILE_STATUS))
+{
+	console.log(ctx.getShaderInfoLog(visshade));
+}
+
+var fvisshade = ctx.createShader(ctx.FRAGMENT_SHADER);
+ctx.shaderSource(fvisshade, document.querySelector("#visfrag").innerHTML);
+ctx.compileShader(fvisshade);
+if(!ctx.getShaderParameter(fvisshade, ctx.COMPILE_STATUS))
+{
+	console.log(ctx.getShaderInfoLog(fvisshade));
+}
+
+var vis = ctx.createProgram();
+ctx.attachShader(vis, visshade);
+ctx.attachShader(vis, fvisshade);
+
+ctx.linkProgram(vis);
+
+var program = ctx.createProgram();
+ctx.attachShader(program, vshade);
+ctx.attachShader(program, fshade);
+
+ctx.linkProgram(program);
+
+ctx.enable(ctx.DEPTH_TEST);
+ctx.enable(ctx.CULL_FACE);
+ctx.depthFunc(ctx.LEQUAL);
+
+var gear = {p: new Array(), i: 0};
+var face = new Array(), k = 0;
+var outr = new Array(), l = 0;
+var race = new Array(), m = 0;
+
+var normvis = new Array();
+
+const ir = 0.3;
+const or = 0.8;
+const tr = 1.0;
+const th = 0.1;
+const TEEF = 24;
+
+function push_vert(t, p, z)
+{
+	t.p[t.i++] = p.x;
+	t.p[t.i++] = p.y;
+	t.p[t.i++] = z;
+}
+
+function push_norm(t, p1, p2)
+{
+	var dx, dy, len;
+
+	dx = p2.x - p1.x;
+	dy = p2.y - p1.y; 
+
+	len = Math.sqrt(dy*dy + dx*dx);
+	dx /= len;
+	dy /= len;
+
+	push_vert(t, {x: dy, y: -dx}, 0.0);
+}
+
+var v = 0;
+
+for(i = 0; i < TEEF*4; i += 4)
+{
+	var a1, a2, a3, a4;
+	var dx, dy;
+	var len;
+
+	/* a1-a4 are the points on this tooth, a5 is a1 from the future */
+	a1 = (i+0) * ((2.0 * 3.14159) / (TEEF*4.0));
+	a2 = (i+1) * ((2.0 * 3.14159) / (TEEF*4.0));
+	a3 = (i+2) * ((2.0 * 3.14159) / (TEEF*4.0));
+	a4 = (i+3) * ((2.0 * 3.14159) / (TEEF*4.0));
+	a5 = (i+4) * ((2.0 * 3.14159) / (TEEF*4.0));
+
+	var p1 = {x: Math.cos(a1), y: Math.sin(a1)};
+	var p2 = {x: Math.cos(a2), y: Math.sin(a2)};
+	var p3 = {x: Math.cos(a3), y: Math.sin(a3)};
+	var p4 = {x: Math.cos(a4), y: Math.sin(a4)};
+	var p5 = {x: Math.cos(a5), y: Math.sin(a5)};
+
+	var h1 = {x: p1.x * or, y: p1.y * or};
+	var h2 = {x: p2.x * or, y: p2.y * or};
+	var h3 = {x: p3.x * tr, y: p3.y * tr};
+	var h4 = {x: p4.x * tr, y: p4.y * tr};
+	var h5 = {x: p5.x * or, y: p5.y * or};
+
+	push_vert(gear, h1, +th);
+	push_norm(gear, h1, h2);
+	normvis[v++] = (h2.x + h1.x)/2;
+	normvis[v++] = (h2.y + h1.y)/2;
+	normvis[v++] = 0;
+	v += 3;
+
+	push_vert(gear, h1, -th);
+	push_norm(gear, h1, h2);
+	normvis[v++] = (h2.x + h1.x)/2;
+	normvis[v++] = (h2.y + h1.y)/2;
+	normvis[v++] = 0;
+	v += 3;
+
+	push_vert(gear, h2, +th);
+	push_norm(gear, h2, h3);
+	normvis[v++] = (h3.x + h2.x)/2;
+	normvis[v++] = (h3.y + h2.y)/2;
+	normvis[v++] = 0;
+	v += 3;
+
+	push_vert(gear, h2, -th);
+	push_norm(gear, h2, h3);
+	normvis[v++] = (h3.x + h2.x)/2;
+	normvis[v++] = (h3.y + h2.y)/2;
+	normvis[v++] = 0;
+	v += 3;
+
+	push_vert(gear, h3, +th);
+	push_norm(gear, h3, h4);
+	normvis[v++] = (h4.x + h3.x)/2;
+	normvis[v++] = (h4.y + h3.y)/2;
+	normvis[v++] = 0;
+	v += 3;
+
+	push_vert(gear, h3, -th);
+	push_norm(gear, h3, h4);
+	normvis[v++] = (h4.x + h3.x)/2;
+	normvis[v++] = (h4.y + h3.y)/2;
+	normvis[v++] = 0;
+	v += 3;
+
+	push_vert(gear, h4, +th);
+	push_norm(gear, h4, h5);
+	normvis[v++] = (h5.x + h4.x)/2;
+	normvis[v++] = (h5.y + h4.y)/2;
+	normvis[v++] = 0;
+	v += 3;
+
+	push_vert(gear, h4, -th);
+	push_norm(gear, h4, h5);
+	normvis[v++] = (h5.x + h4.x)/2;
+	normvis[v++] = (h5.y + h4.y)/2;
+	normvis[v++] = 0;
+	v += 3;
+
+	race[m++] = p1.x*ir; race[m++] = p1.y*ir; race[m++] = -th;
+	race[m++] = -p1.x*ir; race[m++] = -p1.y*ir; race[m++] = 0;
+	race[m++] = p1.x*ir; race[m++] = p1.y*ir; race[m++] = +th;
+	race[m++] = -p1.x*ir; race[m++] = -p1.y*ir; race[m++] = 0;
+	race[m++] = p2.x*ir; race[m++] = p2.y*ir; race[m++] = -th;
+	race[m++] = -p2.x*ir; race[m++] = -p2.y*ir; race[m++] = 0;
+	race[m++] = p2.x*ir; race[m++] = p2.y*ir; race[m++] = +th;
+	race[m++] = -p2.x*ir; race[m++] = -p2.y*ir; race[m++] = 0;
+	race[m++] = p3.x*ir; race[m++] = p3.y*ir; race[m++] = -th;
+	race[m++] = -p3.x*ir; race[m++] = -p3.y*ir; race[m++] = 0;
+	race[m++] = p3.x*ir; race[m++] = p3.y*ir; race[m++] = +th;
+	race[m++] = -p3.x*ir; race[m++] = -p3.y*ir; race[m++] = 0;
+	race[m++] = p4.x*ir; race[m++] = p4.y*ir; race[m++] = -th;
+	race[m++] = -p4.x*ir; race[m++] = -p4.y*ir; race[m++] = 0;
+	race[m++] = p4.x*ir; race[m++] = p4.y*ir; race[m++] = +th;
+	race[m++] = -p4.x*ir; race[m++] = -p4.y*ir; race[m++] = 0;
+
+	face[k++] = Math.cos(a1)*or; face[k++] = Math.sin(a1)*or; face[k++] = -th;
+	face[k++] = 0; face[k++] = 0; face[k++] = 1	;
+	face[k++] = Math.cos(a1)*ir; face[k++] = Math.sin(a1)*ir; face[k++] = -th;
+	face[k++] = 0; face[k++] = 0; face[k++] = 1;
+	face[k++] = Math.cos(a2)*or; face[k++] = Math.sin(a2)*or; face[k++] = -th;
+	face[k++] = 0; face[k++] = 0; face[k++] = 1;
+	face[k++] = Math.cos(a2)*ir; face[k++] = Math.sin(a2)*ir; face[k++] = -th;
+	face[k++] = 0; face[k++] = 0; face[k++] = 1;
+	face[k++] = Math.cos(a3)*tr; face[k++] = Math.sin(a3)*tr; face[k++] = -th;
+	face[k++] = 0; face[k++] = 0; face[k++] = 1;
+	face[k++] = Math.cos(a3)*ir; face[k++] = Math.sin(a3)*ir; face[k++] = -th;
+	face[k++] = 0; face[k++] = 0; face[k++] = 1;
+	face[k++] = Math.cos(a4)*tr; face[k++] = Math.sin(a4)*tr; face[k++] = -th;
+	face[k++] = 0; face[k++] = 0; face[k++] = 1;
+	face[k++] = Math.cos(a4)*ir; face[k++] = Math.sin(a4)*ir; face[k++] = -th;
+	face[k++] = 0; face[k++] = 0; face[k++] = 1;
+
+	outr[l++] = Math.cos(a1)*ir; outr[l++] = Math.sin(a1)*ir; outr[l++] = +th;
+	outr[l++] = 0; outr[l++] = 0; outr[l++] = -1;
+	outr[l++] = Math.cos(a1)*or; outr[l++] = Math.sin(a1)*or; outr[l++] = +th;
+	outr[l++] = 0; outr[l++] = 0; outr[l++] = -1;
+	outr[l++] = Math.cos(a2)*ir; outr[l++] = Math.sin(a2)*ir; outr[l++] = +th;
+	outr[l++] = 0; outr[l++] = 0; outr[l++] = -1;
+	outr[l++] = Math.cos(a2)*or; outr[l++] = Math.sin(a2)*or; outr[l++] = +th;
+	outr[l++] = 0; outr[l++] = 0; outr[l++] = -1;
+	outr[l++] = Math.cos(a3)*ir; outr[l++] = Math.sin(a3)*ir; outr[l++] = +th;
+	outr[l++] = 0; outr[l++] = 0; outr[l++] = -1;
+	outr[l++] = Math.cos(a3)*tr; outr[l++] = Math.sin(a3)*tr; outr[l++] = +th;
+	outr[l++] = 0; outr[l++] = 0; outr[l++] = -1;
+	outr[l++] = Math.cos(a4)*ir; outr[l++] = Math.sin(a4)*ir; outr[l++] = +th;
+	outr[l++] = 0; outr[l++] = 0; outr[l++] = -1;
+	outr[l++] = Math.cos(a4)*tr; outr[l++] = Math.sin(a4)*tr; outr[l++] = +th;
+	outr[l++] = 0; outr[l++] = 0; outr[l++] = -1;
+}
+
+for(i = 0; i < 12; i++)
+{
+	face[k++] = face[i];
+	race[m++] = race[i];
+	outr[l++] = outr[i];
+}
+
+push_vert(gear, {x: gear.p[0], y: gear.p[1]}, gear.p[2]);
+push_vert(gear, {x: gear.p[3], y: gear.p[4]}, gear.p[5]);
+push_vert(gear, {x: gear.p[6], y: gear.p[7]}, gear.p[8]);
+push_vert(gear, {x: gear.p[9], y: gear.p[10]}, gear.p[11]);
+
+
+for(i = 0; i < TEEF*8+2; i++)
+{
+	normvis[i*6+3] = normvis[i*6+0]*1 + gear.p[i*6+3]*0.06;
+	normvis[i*6+4] = normvis[i*6+1]*1 + gear.p[i*6+4]*0.06;
+	normvis[i*6+5] = normvis[i*6+2]*1 + gear.p[i*6+5]*0.06;
+//	normvis[i*6+3] = 0.0;
+//	normvis[i*6+4] = 0.0;
+//	normvis[i*6+5] = 0.0;
+}
+
+const teeth_verts = new Float32Array(gear.p);
+const face_verts  = new Float32Array(face);
+const outr_verts  = new Float32Array(outr);
+const race_verts  = new Float32Array(race);
+const vis_verts   = new Float32Array(normvis);
+
+var teeth_buffer = ctx.createBuffer();
+ctx.bindBuffer(ctx.ARRAY_BUFFER, teeth_buffer);
+ctx.bufferData(ctx.ARRAY_BUFFER, teeth_verts, ctx.STATIC_DRAW);
+
+var face_buffer = ctx.createBuffer();
+ctx.bindBuffer(ctx.ARRAY_BUFFER, face_buffer);
+ctx.bufferData(ctx.ARRAY_BUFFER, face_verts, ctx.STATIC_DRAW);
+
+var outr_buffer = ctx.createBuffer();
+ctx.bindBuffer(ctx.ARRAY_BUFFER, outr_buffer);
+ctx.bufferData(ctx.ARRAY_BUFFER, outr_verts, ctx.STATIC_DRAW);
+
+var race_buffer = ctx.createBuffer();
+ctx.bindBuffer(ctx.ARRAY_BUFFER, race_buffer);
+ctx.bufferData(ctx.ARRAY_BUFFER, race_verts, ctx.STATIC_DRAW);
+
+var vis_buffer = ctx.createBuffer();
+ctx.bindBuffer(ctx.ARRAY_BUFFER, vis_buffer);
+ctx.bufferData(ctx.ARRAY_BUFFER, vis_verts, ctx.STATIC_DRAW);
+
+var frz = 0;
+var loc = ctx.getUniformLocation(program, "frames");
+var mov = ctx.getUniformLocation(program, "mov");
+var scale = ctx.getUniformLocation(program, "scale");
+var colour = ctx.getUniformLocation(program, "colour");
+var rot = ctx.getUniformLocation(program, "rot");
+
+var attr = ctx.getAttribLocation(program, "pos");
+var norm = ctx.getAttribLocation(program, "normie");
+
+var visattr = ctx.getAttribLocation(vis, "pos");
+var visloc = ctx.getUniformLocation(vis, "frames");
+var visscale = ctx.getUniformLocation(vis, "scale");
+var visrot = ctx.getUniformLocation(vis, "rot");
+
+function drawgear(x, y, z, s, r, g, b, o)
+{
+	ctx.useProgram(program);
+
+	ctx.uniform1f(loc, frz);
+	ctx.uniform1f(scale, s);
+	ctx.uniform3f(colour, r, g, b);
+	ctx.uniform3f(mov, x, y, z);
+	ctx.uniform1f(rot, o);
+
+	ctx.bindBuffer(ctx.ARRAY_BUFFER, face_buffer);
+	ctx.enableVertexAttribArray(0);
+	ctx.vertexAttribPointer(attr, 3, ctx.FLOAT, false, 6*4, 0);
+	ctx.enableVertexAttribArray(1);
+	ctx.vertexAttribPointer(norm, 3, ctx.FLOAT, false, 6*4, 3*4);
+	ctx.drawArrays(ctx.TRIANGLE_STRIP, 0, TEEF*8+2);
+
+	ctx.bindBuffer(ctx.ARRAY_BUFFER, outr_buffer);
+	ctx.enableVertexAttribArray(0);
+	ctx.vertexAttribPointer(attr, 3, ctx.FLOAT, false, 6*4, 0);
+	ctx.enableVertexAttribArray(1);
+	ctx.vertexAttribPointer(norm, 3, ctx.FLOAT, false, 6*4, 3*4);
+	ctx.drawArrays(ctx.TRIANGLE_STRIP, 0, TEEF*8+2);
+
+	ctx.bindBuffer(ctx.ARRAY_BUFFER, teeth_buffer);
+	ctx.enableVertexAttribArray(0);
+	ctx.vertexAttribPointer(attr, 3, ctx.FLOAT, false, 6*4, 0);
+	ctx.enableVertexAttribArray(1);
+	ctx.vertexAttribPointer(norm, 3, ctx.FLOAT, false, 6*4, 3*4);
+	ctx.drawArrays(ctx.TRIANGLE_STRIP, 0, TEEF*8+2);
+
+	ctx.bindBuffer(ctx.ARRAY_BUFFER, race_buffer);
+	ctx.enableVertexAttribArray(0);
+	ctx.vertexAttribPointer(attr, 3, ctx.FLOAT, false, 6*4, 0);
+	ctx.enableVertexAttribArray(1);
+	ctx.vertexAttribPointer(norm, 3, ctx.FLOAT, false, 6*4, 3*4);
+	ctx.drawArrays(ctx.TRIANGLE_STRIP, 0, TEEF*8+2);
+
+//	ctx.clear(ctx.DEPTH_BUFFER_BIT);
+	ctx.useProgram(vis);
+
+	ctx.uniform1f(visloc, frz);
+	ctx.uniform1f(visscale, s);
+	ctx.uniform1f(visrot, o);
+
+	ctx.bindBuffer(ctx.ARRAY_BUFFER, vis_buffer);
+	ctx.enableVertexAttribArray(0);
+	ctx.vertexAttribPointer(visattr, 3, ctx.FLOAT, false, 0, 0);
+	ctx.drawArrays(ctx.LINES, 0, TEEF*16+2);
+	
+}
+
+function update()
+{
+	frz += 1.0;
+
+	ctx.clearColor(0.0, 1.0, 0.0, 1.0);
+	ctx.clear(ctx.COLOR_BUFFER_BIT);
+	ctx.clear(ctx.DEPTH_BUFFER_BIT);
+
+	drawgear(0.0, 0.0, 0.0, 65.0, 0.4, 0.1, 0.1, -1.0);
+	//drawgear(-45.0,  15.0, 0.0, 25.0, 0.4, 0.3, 0.1, 1.0);
+	//drawgear(45.0, -15.0, 0.0, 25.0, 0.4, 0.3, 0.5, 1.0);
+
+}
+
+if(norm == -1)
+{
+}
+else
+setInterval(update, 15);
+
+</script>
